@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 실시간 회의 번역기 (Web)
 
-## Getting Started
+차량용 반도체 팹리스 회사 회의 실시간 번역 웹앱.  
+마이크 음성 → Whisper STT → GPT-4o 번역 → 실시간 자막.
 
-First, run the development server:
+## 로컬 실행
 
+### 1. 의존성 설치
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. 환경변수 설정
+`.env.local` 파일 생성:
+```
+APP_PASSWORD=원하는비밀번호
+SESSION_SECRET=랜덤32자이상문자열
+OPENAI_API_KEY=sk-proj-...
+GROQ_API_KEY=gsk_...
+DEFAULT_STT_ENGINE=openai
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. 실행
+```bash
+npm run dev
+```
+`http://localhost:3000` 접속
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## GitHub 업로드
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# GitHub에서 새 레포지토리 생성 후
+git remote add origin https://github.com/<유저명>/<레포명>.git
+git push -u origin main
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Vercel 배포
 
-## Deploy on Vercel
+1. [vercel.com](https://vercel.com) 로그인
+2. **Add New → Project** 클릭
+3. GitHub 레포지토리 연결 (Import)
+4. **Environment Variables** 탭에서 아래 값 입력:
+   - `APP_PASSWORD`
+   - `SESSION_SECRET`
+   - `OPENAI_API_KEY`
+   - `GROQ_API_KEY`
+   - `DEFAULT_STT_ENGINE` = `openai`
+5. **Deploy** 클릭 → 완료
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+이후 main 브랜치에 push할 때마다 자동 배포됩니다.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## 주의사항
+
+- 마이크는 HTTPS 환경에서만 동작 (Vercel 기본 제공)
+- `.env.local`은 절대 Git에 올리지 마세요
+- SESSION_SECRET은 32자 이상 랜덤 문자열 사용 권장
