@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 
+export const maxDuration = 60;
+
 const RMS_THRESHOLD = 0.03;
 
 function calcRms(buffer: ArrayBuffer): number {

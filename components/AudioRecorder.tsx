@@ -44,7 +44,8 @@ export default function useAudioRecorder({
       const volumeInterval = setInterval(() => {
         analyser.getByteFrequencyData(dataArray);
         const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-        onVolume(avg / 255);
+        const level = avg / 255;
+        onVolume(level > 0.05 ? level : 0);
       }, 100);
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -64,7 +65,13 @@ export default function useAudioRecorder({
           formData.append("koreanOnly", String(koreanOnly));
 
           const sttRes = await fetch("/api/transcribe", { method: "POST", body: formData });
-          const { text, language } = await sttRes.json();
+          if (!sttRes.ok) {
+            const errText = await sttRes.text();
+            onError(`STT ${sttRes.status}: ${errText.slice(0, 100)}`);
+            return;
+          }
+          const sttData = await sttRes.json();
+          const { text, language } = sttData;
           if (!text) return;
 
           const transRes = await fetch("/api/translate", {
@@ -72,6 +79,12 @@ export default function useAudioRecorder({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text, language }),
           });
+          if (!transRes.ok) {
+            const errText = await transRes.text();
+            onError(`번역 ${transRes.status}: ${errText.slice(0, 100)}`);
+            onResult({ text, language, translation: "" });
+            return;
+          }
           const { translation } = await transRes.json();
 
           onResult({ text, language, translation });
