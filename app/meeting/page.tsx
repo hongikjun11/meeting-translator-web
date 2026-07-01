@@ -17,20 +17,31 @@ export default function MeetingPage() {
   const [volume, setVolume] = useState(0);
   const [summary, setSummary] = useState("");
   const [showSummary, setShowSummary] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const debugRef = useRef<HTMLDivElement>(null);
+
+  const addDebugLog = useCallback((msg: string) => {
+    const time = new Date().toTimeString().slice(0, 8);
+    setDebugLogs((prev) => [...prev.slice(-99), `[${time}] ${msg}`]);
+    setTimeout(() => debugRef.current?.scrollTo(0, debugRef.current.scrollHeight), 50);
+  }, []);
 
   const onResult = useCallback(({ text, language, translation }: { text: string; language: string; translation: string }) => {
     const timestamp = new Date().toTimeString().slice(0, 8);
     setSubtitle(translation || text);
+    addDebugLog(`OK | [${language}] "${text}" → "${translation}"`);
     setRecords((prev) => [
       ...prev,
       { timestamp, language: language.toUpperCase(), original: text, translation },
     ]);
-  }, []);
+  }, [addDebugLog]);
 
   const onError = useCallback((msg: string) => {
     setSubtitle(`⚠️ ${msg}`);
-  }, []);
+    addDebugLog(`ERR | ${msg}`);
+  }, [addDebugLog]);
 
   const { start, stop } = useAudioRecorder({
     engine,
@@ -38,11 +49,13 @@ export default function MeetingPage() {
     onResult,
     onVolume: setVolume,
     onError,
+    onDebug: addDebugLog,
   });
 
   const handleStart = async () => {
     setRunning(true);
     setSubtitle("번역 중... 말씀하세요");
+    addDebugLog(`시작 | engine=${engine} koreanOnly=${koreanOnly}`);
     const cleanup = await start();
     if (cleanup) cleanupRef.current = cleanup;
   };
@@ -53,12 +66,14 @@ export default function MeetingPage() {
     setRunning(false);
     setSubtitle("중지됨");
     setVolume(0);
+    addDebugLog("중지됨");
   };
 
   const handleNewMeeting = () => {
     handleStop();
     setRecords([]);
     setOriginalRecords(null);
+    setDebugLogs([]);
     setSubtitle("번역 준비 완료");
   };
 
@@ -71,29 +86,37 @@ export default function MeetingPage() {
     }
     if (!records.length) { setSubtitle("⚠️ 정제할 내용이 없습니다"); return; }
     setSubtitle("텍스트 정제 중...");
-    const res = await fetch("/api/refine", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ records }),
-    });
-    const { records: refined } = await res.json();
-    setOriginalRecords(records);
-    setRecords(refined);
-    setSubtitle("✅ 정제 완료 — 요약 버튼을 누르세요");
+    try {
+      const res = await fetch("/api/refine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records }),
+      });
+      const { records: refined } = await res.json();
+      setOriginalRecords(records);
+      setRecords(refined);
+      setSubtitle("✅ 정제 완료 — 요약 버튼을 누르세요");
+    } catch (err) {
+      setSubtitle(`⚠️ 정제 오류: ${err}`);
+    }
   };
 
   const handleSummarize = async () => {
     if (!records.length) { setSubtitle("⚠️ 요약할 내용이 없습니다"); return; }
     setSubtitle("요약 생성 중...");
-    const res = await fetch("/api/summarize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ records }),
-    });
-    const { summary: s } = await res.json();
-    setSummary(s);
-    setShowSummary(true);
-    setSubtitle("요약 완료");
+    try {
+      const res = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records }),
+      });
+      const { summary: s } = await res.json();
+      setSummary(s);
+      setShowSummary(true);
+      setSubtitle("요약 완료");
+    } catch (err) {
+      setSubtitle(`⚠️ 요약 오류: ${err}`);
+    }
   };
 
   const handleSaveTxt = () => {
@@ -142,6 +165,25 @@ export default function MeetingPage() {
           onSummarize={handleSummarize}
           refineLabel={refineLabel}
         />
+
+        {/* 디버그 패널 */}
+        <div>
+          <label className="flex items-center gap-2 text-sm text-gray-500 cursor-pointer select-none">
+            <input type="checkbox" checked={showDebug} onChange={(e) => setShowDebug(e.target.checked)} />
+            디버그 패널
+          </label>
+          {showDebug && (
+            <div
+              ref={debugRef}
+              className="mt-1 bg-gray-900 text-green-400 font-mono text-xs rounded-lg p-3 h-32 overflow-y-auto"
+            >
+              {debugLogs.length === 0 && <span className="text-gray-500">로그 없음</span>}
+              {debugLogs.map((log, i) => (
+                <div key={i}>{log}</div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {showSummary && (

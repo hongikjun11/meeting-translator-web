@@ -16,6 +16,7 @@ interface Props {
   onResult: (result: TranscriptResult) => void;
   onVolume: (level: number) => void;
   onError: (msg: string) => void;
+  onDebug?: (msg: string) => void;
 }
 
 export default function useAudioRecorder({
@@ -24,6 +25,7 @@ export default function useAudioRecorder({
   onResult,
   onVolume,
   onError,
+  onDebug,
 }: Props) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -64,15 +66,18 @@ export default function useAudioRecorder({
           formData.append("engine", engine);
           formData.append("koreanOnly", String(koreanOnly));
 
+          onDebug?.(`청크 전송 | size=${e.data.size} engine=${engine}`);
           const sttRes = await fetch("/api/transcribe", { method: "POST", body: formData });
           if (!sttRes.ok) {
             const errText = await sttRes.text();
-            onError(`STT ${sttRes.status}: ${errText.slice(0, 100)}`);
+            onError(`STT ${sttRes.status}: ${errText.slice(0, 200)}`);
             return;
           }
           const sttData = await sttRes.json();
-          const { text, language } = sttData;
-          if (!text) return;
+          const { text, language, error: sttErr } = sttData;
+          if (sttErr) { onError(`STT: ${sttErr}`); return; }
+          if (!text) { onDebug?.("무음 스킵"); return; }
+          onDebug?.(`STT OK | [${language}] "${text}"`);
 
           const transRes = await fetch("/api/translate", {
             method: "POST",
@@ -81,11 +86,13 @@ export default function useAudioRecorder({
           });
           if (!transRes.ok) {
             const errText = await transRes.text();
-            onError(`번역 ${transRes.status}: ${errText.slice(0, 100)}`);
+            onError(`번역 ${transRes.status}: ${errText.slice(0, 200)}`);
             onResult({ text, language, translation: "" });
             return;
           }
-          const { translation } = await transRes.json();
+          const transData = await transRes.json();
+          const { translation, error: transErr } = transData;
+          if (transErr) { onError(`번역: ${transErr}`); onResult({ text, language, translation: "" }); return; }
 
           onResult({ text, language, translation });
         } catch (err) {
