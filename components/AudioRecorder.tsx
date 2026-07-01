@@ -61,6 +61,7 @@ export default function useAudioRecorder({
   const runningRef = useRef(false);
   const processingRef = useRef(false);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const lastTextRef = useRef("");
 
   const processChunk = useCallback(async (blob: Blob) => {
     if (processingRef.current) { onDebug?.("이전 청크 처리 중 — 스킵"); return; }
@@ -82,6 +83,9 @@ export default function useAudioRecorder({
       if (sttErr) { onError(`STT: ${sttErr}`); return; }
       if (!text) { onDebug?.("STT 빈 결과"); return; }
       if (isHallucination(text)) { onDebug?.(`환각 필터 | "${text}"`); return; }
+      // 무음 환각은 직전 결과와 동일하게 반복되는 경향 → 중복 차단
+      if (text.trim() === lastTextRef.current) { onDebug?.(`중복 차단 | "${text}"`); return; }
+      lastTextRef.current = text.trim();
 
       onDebug?.(`STT OK | [${language}] "${text}"`);
 
@@ -112,20 +116,19 @@ export default function useAudioRecorder({
     const analyser = analyserRef.current;
     const recorder = new MediaRecorder(stream, { mimeType });
     const chunks: Blob[] = [];
-    let maxRms = 0;
     const timeDomain = new Uint8Array(analyser ? analyser.fftSize : 256);
+    // 데스크탑처럼 4초 전체 버퍼의 평균 RMS를 계산 (제곱합 누적)
+    let sumSquares = 0;
+    let sampleCount = 0;
 
-    // 청크 녹음 중 파형 RMS 측정 (최대값 추적)
     const rmsInterval = setInterval(() => {
       if (!analyser) return;
       analyser.getByteTimeDomainData(timeDomain);
-      let sum = 0;
       for (let i = 0; i < timeDomain.length; i++) {
         const n = (timeDomain[i] - 128) / 128;
-        sum += n * n;
+        sumSquares += n * n;
+        sampleCount++;
       }
-      const rms = Math.sqrt(sum / timeDomain.length);
-      if (rms > maxRms) maxRms = rms;
     }, 100);
 
     recorder.ondataavailable = (e) => {
@@ -134,12 +137,13 @@ export default function useAudioRecorder({
 
     recorder.onstop = () => {
       clearInterval(rmsInterval);
-      onDebug?.(`청크 완료 | maxRMS=${maxRms.toFixed(4)}`);
-      if (maxRms >= RMS_THRESHOLD && chunks.length > 0) {
+      const rms = sampleCount > 0 ? Math.sqrt(sumSquares / sampleCount) : 0;
+      onDebug?.(`청크 완료 | RMS=${rms.toFixed(4)}`);
+      if (rms >= RMS_THRESHOLD && chunks.length > 0) {
         const blob = new Blob(chunks, { type: mimeType });
         processChunk(blob);
       } else {
-        onDebug?.(`무음 스킵 | maxRMS=${maxRms.toFixed(4)}`);
+        onDebug?.(`무음 스킵 | RMS=${rms.toFixed(4)}`);
       }
       if (runningRef.current) startChunk(stream, mimeType);
     };
@@ -152,7 +156,15 @@ export default function useAudioRecorder({
 
   const start = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // AGC(자동 게인)를 끄지 않으면 브라우저가 조용한 방의 소음을 증폭 → 무음인데 RMS가 올라가
+      // Whisper 환각 유발. 데스크탑 sounddevice처럼 원본에 가깝게 캡처.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: false,
+        },
+      });
       streamRef.current = stream;
       runningRef.current = true;
 
@@ -163,12 +175,18 @@ export default function useAudioRecorder({
       source.connect(analyser);
       analyserRef.current = analyser;
 
-      const freqData = new Uint8Array(analyser.frequencyBinCount);
+      // 볼륨 바도 파형 RMS 기준으로 표시 (무음일 때 진짜 0이 되도록)
+      const volData = new Uint8Array(analyser.fftSize);
       const volumeInterval = setInterval(() => {
-        analyser.getByteFrequencyData(freqData);
-        const avg = freqData.reduce((a, b) => a + b, 0) / freqData.length;
-        const level = avg / 255;
-        onVolume(level > 0.05 ? level : 0);
+        analyser.getByteTimeDomainData(volData);
+        let sum = 0;
+        for (let i = 0; i < volData.length; i++) {
+          const n = (volData[i] - 128) / 128;
+          sum += n * n;
+        }
+        const rms = Math.sqrt(sum / volData.length);
+        // RMS는 보통 0~0.3 범위 → 바 표시용으로 확대
+        onVolume(rms >= RMS_THRESHOLD ? Math.min(rms * 3, 1) : 0);
       }, 100);
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
