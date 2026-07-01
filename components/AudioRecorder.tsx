@@ -1,9 +1,8 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, type MutableRefObject } from "react";
 
 const CHUNK_MS = 4000;
-const RMS_THRESHOLD = 0.03; // 파형 기반 RMS — 데스크탑 앱과 동일 기준
 
 // Whisper 무음 환각 필터 — 구두점 제거 후 포함 여부 체크
 const HALLUCINATION_PATTERNS = [
@@ -43,6 +42,7 @@ export interface TranscriptResult {
 interface Props {
   engine: "openai" | "groq";
   koreanOnly: boolean;
+  thresholdRef: MutableRefObject<number>;
   onResult: (result: TranscriptResult) => void;
   onVolume: (level: number) => void;
   onError: (msg: string) => void;
@@ -52,6 +52,7 @@ interface Props {
 export default function useAudioRecorder({
   engine,
   koreanOnly,
+  thresholdRef,
   onResult,
   onVolume,
   onError,
@@ -138,8 +139,9 @@ export default function useAudioRecorder({
     recorder.onstop = () => {
       clearInterval(rmsInterval);
       const rms = sampleCount > 0 ? Math.sqrt(sumSquares / sampleCount) : 0;
-      onDebug?.(`청크 완료 | RMS=${rms.toFixed(4)}`);
-      if (rms >= RMS_THRESHOLD && chunks.length > 0) {
+      const threshold = thresholdRef.current;
+      onDebug?.(`청크 완료 | RMS=${rms.toFixed(4)} (기준 ${threshold.toFixed(3)})`);
+      if (rms >= threshold && chunks.length > 0) {
         const blob = new Blob(chunks, { type: mimeType });
         processChunk(blob);
       } else {
@@ -185,8 +187,7 @@ export default function useAudioRecorder({
           sum += n * n;
         }
         const rms = Math.sqrt(sum / volData.length);
-        // RMS는 보통 0~0.3 범위 → 바 표시용으로 확대
-        onVolume(rms >= RMS_THRESHOLD ? Math.min(rms * 3, 1) : 0);
+        onVolume(rms); // 원본 RMS 그대로 전달 (화면에서 숫자로 표시)
       }, 100);
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")

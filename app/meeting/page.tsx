@@ -15,6 +15,8 @@ export default function MeetingPage() {
   const [records, setRecords] = useState<Record[]>([]);
   const [originalRecords, setOriginalRecords] = useState<Record[] | null>(null);
   const [volume, setVolume] = useState(0);
+  const [threshold, setThreshold] = useState(0.03);
+  const thresholdRef = useRef(0.03);
   const [summary, setSummary] = useState("");
   const [showSummary, setShowSummary] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -43,9 +45,15 @@ export default function MeetingPage() {
     addDebugLog(`ERR | ${msg}`);
   }, [addDebugLog]);
 
+  const handleThresholdChange = useCallback((v: number) => {
+    thresholdRef.current = v;
+    setThreshold(v);
+  }, []);
+
   const { start, stop } = useAudioRecorder({
     engine,
     koreanOnly,
+    thresholdRef,
     onResult,
     onVolume: setVolume,
     onError,
@@ -146,6 +154,8 @@ export default function MeetingPage() {
           engine={engine}
           koreanOnly={koreanOnly}
           volume={volume}
+          threshold={threshold}
+          onThresholdChange={handleThresholdChange}
           onStart={handleStart}
           onStop={handleStop}
           onNewMeeting={handleNewMeeting}
