@@ -19,9 +19,12 @@ export default function MeetingPage() {
   const [threshold, setThreshold] = useState(0.03);
   const thresholdRef = useRef(0.03);
   const [context, setContext] = useState("");
+  const [appliedContext, setAppliedContext] = useState("");
   const contextRef = useRef("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [showContext, setShowContext] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [summary, setSummary] = useState("");
   const [showSummary, setShowSummary] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -55,10 +58,10 @@ export default function MeetingPage() {
     setThreshold(v);
   }, []);
 
-  const handleContextChange = useCallback((v: string) => {
-    contextRef.current = v;
-    setContext(v);
-  }, []);
+  const handleApplyContext = useCallback(() => {
+    contextRef.current = context;
+    setAppliedContext(context);
+  }, [context]);
 
   const { start, stop } = useAudioRecorder({
     engine,
@@ -97,28 +100,11 @@ export default function MeetingPage() {
     setSubtitle("번역 준비 완료");
   };
 
-  const handleRefine = async () => {
-    if (originalRecords !== null) {
-      setRecords(originalRecords);
-      setOriginalRecords(null);
-      setSubtitle("↩️ 원본으로 복원됐습니다");
-      return;
-    }
-    if (!records.length) { setSubtitle("⚠️ 정제할 내용이 없습니다"); return; }
-    setSubtitle("텍스트 정제 중...");
-    try {
-      const res = await fetch("/api/refine", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records }),
-      });
-      const { records: refined } = await res.json();
-      setOriginalRecords(records);
-      setRecords(refined);
-      setSubtitle("✅ 정제 완료 — 요약 버튼을 누르세요");
-    } catch (err) {
-      setSubtitle(`⚠️ 정제 오류: ${err}`);
-    }
+  const handleRevert = () => {
+    if (originalRecords === null) return;
+    setRecords(originalRecords);
+    setOriginalRecords(null);
+    setSubtitle("↩️ 정제 전 원본으로 복원됐습니다");
   };
 
   const handleSummarize = async () => {
@@ -197,8 +183,6 @@ export default function MeetingPage() {
     URL.revokeObjectURL(url);
   };
 
-  const refineLabel = originalRecords !== null ? "↩️ 원복" : "✏️ 텍스트 정제";
-
   return (
     <main className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-3xl mx-auto flex flex-col gap-4">
@@ -219,18 +203,52 @@ export default function MeetingPage() {
         />
 
         <div>
-          <label htmlFor="context" className="text-sm font-medium text-gray-600">
-            회의 주제 / 용어 힌트 <span className="text-gray-400 font-normal">(인식·번역 정확도 향상)</span>
+          <button
+            onClick={() => setShowContext((v) => !v)}
+            className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-800"
+          >
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-gray-200 text-gray-600 text-xs leading-none">
+              {showContext ? "−" : "+"}
+            </span>
+            회의 주제 / 용어 힌트
+            {!showContext && appliedContext.trim() && (
+              <span className="text-xs text-green-600 font-normal">✓ 적용됨</span>
+            )}
+          </button>
+          {!showContext && (
+            <span className="text-gray-400 font-normal text-xs ml-6 block">인식·번역 정확도 향상</span>
+          )}
+        </div>
+
+        {showContext && (
+        <div>
+          <label htmlFor="context" className="sr-only">
+            회의 주제 / 용어 힌트
           </label>
           <textarea
             id="context"
             value={context}
-            onChange={(e) => handleContextChange(e.target.value)}
+            onChange={(e) => setContext(e.target.value)}
             rows={2}
             placeholder="예: 차량용 반도체 SoC 설계 회의. 용어: 테이프아웃, 팹리스, ISO26262, ADAS. 참석자: 김철수, 이영희"
             className="w-full mt-1 border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-300 placeholder:italic"
           />
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              onClick={handleApplyContext}
+              disabled={context === appliedContext}
+              className="px-3 py-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white rounded-lg text-xs font-semibold"
+            >
+              적용
+            </button>
+            {context === appliedContext && appliedContext.trim() ? (
+              <span className="text-xs text-green-600">✓ 적용됨</span>
+            ) : context !== appliedContext ? (
+              <span className="text-xs text-amber-600">● 변경됨 — 적용을 눌러주세요</span>
+            ) : null}
+          </div>
         </div>
+        )}
 
         <div>
           <label className="text-sm font-medium text-gray-600">실시간 자막</label>
@@ -240,17 +258,34 @@ export default function MeetingPage() {
         <HistoryPanel
           records={records}
           onSaveTxt={handleSaveTxt}
-          onRefine={handleRefine}
           onSummarize={handleSummarize}
           onEditRecord={handleEditRecord}
-          refineLabel={refineLabel}
+          canRevert={originalRecords !== null}
+          onRevert={handleRevert}
         />
 
-        <RefineChat
-          messages={chatMessages}
-          loading={chatLoading}
-          onSend={handleChatSend}
-        />
+        <div>
+          <button
+            onClick={() => setShowChat((v) => !v)}
+            className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-800"
+          >
+            <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-gray-200 text-gray-600 text-xs leading-none">
+              {showChat ? "−" : "+"}
+            </span>
+            AI 대화 기록 정제
+            {!showChat && chatMessages.length > 0 && (
+              <span className="text-xs text-blue-600 font-normal">💬 {chatMessages.filter((m) => m.role === "user").length}</span>
+            )}
+          </button>
+        </div>
+
+        {showChat && (
+          <RefineChat
+            messages={chatMessages}
+            loading={chatLoading}
+            onSend={handleChatSend}
+          />
+        )}
 
         {/* 디버그 패널 */}
         <div>

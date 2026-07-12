@@ -6,14 +6,14 @@ import type { Record } from "@/app/api/refine/route";
 interface Props {
   records: Record[];
   onSaveTxt: () => void;
-  onRefine: () => void;
   onSummarize: () => void;
   onEditRecord: (index: number, field: "original" | "translation", value: string) => void;
-  refineLabel: string;
+  canRevert: boolean;
+  onRevert: () => void;
 }
 
 export default function HistoryPanel({
-  records, onSaveTxt, onRefine, onSummarize, onEditRecord, refineLabel,
+  records, onSaveTxt, onSummarize, onEditRecord, canRevert, onRevert,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<{ index: number; field: "original" | "translation" } | null>(null);
@@ -106,9 +106,11 @@ export default function HistoryPanel({
         <button onClick={onSaveTxt} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">
           TXT 저장
         </button>
-        <button onClick={onRefine} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">
-          {refineLabel}
-        </button>
+        {canRevert && (
+          <button onClick={onRevert} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">
+            ↩️ 정제 원복
+          </button>
+        )}
         <button onClick={onSummarize} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">
           📋 회의 요약
         </button>

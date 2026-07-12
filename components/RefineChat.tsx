@@ -13,7 +13,16 @@ interface Props {
   onSend: (instruction: string) => void;
 }
 
-const EXAMPLES = ["오탈자 전부 고쳐줘", "전부 존댓말로 바꿔줘", "'김철수'를 '김민수'로 바꿔줘"];
+const EXAMPLES = ["'의원님'을 '위원님'으로 고쳐줘", "문장 자연스럽게 다듬어줘", "어색한 단어 수정해줘"];
+
+// 전체 정제 기본 지시 — 같은 단어의 오인식 편차를 유추해 올바른 형태로 통일
+const AUTO_REFINE =
+  "전체 대화 기록을 검토해서 음성인식 오류를 교정해줘. " +
+  "핵심 규칙: 같은 단어인데 어떤 곳은 정확히, 어떤 곳은 다르게(오인식) 표기된 경우가 있어. " +
+  "이런 표기 편차들을 서로 같은 단어로 유추해서, 문맥상 가장 올바른 하나의 형태로 통일해줘. " +
+  "(예: '위원님'과 '의원님', '위언님'이 섞여 있으면 문맥상 맞는 '위원님'으로 모두 통일) " +
+  "그 밖에 문맥상 어색하거나 잘못 인식된 단어, 오탈자, 어색한 문장도 자연스럽게 다듬어줘. " +
+  "발언의 의미와 내용은 그대로 유지해줘.";
 
 export default function RefineChat({ messages, loading, onSend }: Props) {
   const [input, setInput] = useState("");
@@ -33,8 +42,16 @@ export default function RefineChat({ messages, loading, onSend }: Props) {
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-gray-600">
-        AI 정제 대화 <span className="text-gray-400 font-normal">(지시하면 대화 기록을 고쳐줍니다)</span>
+        AI 대화 기록 정제 <span className="text-gray-400 font-normal">(AI에게 지시하면 대화 기록을 수정·개선)</span>
       </label>
+
+      <button
+        onClick={() => onSend(AUTO_REFINE)}
+        disabled={loading}
+        className="self-start px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-40 text-white rounded-lg text-sm font-semibold"
+      >
+        ✨ 전체 정제 (오인식·반복 자동 교정)
+      </button>
 
       <div className="bg-white border border-gray-200 rounded-lg p-3 text-sm max-h-56 overflow-y-auto flex flex-col gap-2">
         {messages.length === 0 && (
