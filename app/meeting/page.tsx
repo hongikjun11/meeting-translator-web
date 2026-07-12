@@ -5,6 +5,7 @@ import useAudioRecorder from "@/components/AudioRecorder";
 import ControlBar from "@/components/ControlBar";
 import SubtitleDisplay from "@/components/SubtitleDisplay";
 import HistoryPanel from "@/components/HistoryPanel";
+import RefineChat, { type ChatMessage } from "@/components/RefineChat";
 import type { Record } from "@/app/api/refine/route";
 
 export default function MeetingPage() {
@@ -17,6 +18,10 @@ export default function MeetingPage() {
   const [volume, setVolume] = useState(0);
   const [threshold, setThreshold] = useState(0.03);
   const thresholdRef = useRef(0.03);
+  const [context, setContext] = useState("");
+  const contextRef = useRef("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
   const [summary, setSummary] = useState("");
   const [showSummary, setShowSummary] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -50,10 +55,16 @@ export default function MeetingPage() {
     setThreshold(v);
   }, []);
 
+  const handleContextChange = useCallback((v: string) => {
+    contextRef.current = v;
+    setContext(v);
+  }, []);
+
   const { start, stop } = useAudioRecorder({
     engine,
     koreanOnly,
     thresholdRef,
+    contextRef,
     onResult,
     onVolume: setVolume,
     onError,
@@ -82,6 +93,7 @@ export default function MeetingPage() {
     setRecords([]);
     setOriginalRecords(null);
     setDebugLogs([]);
+    setChatMessages([]);
     setSubtitle("번역 준비 완료");
   };
 
@@ -127,6 +139,49 @@ export default function MeetingPage() {
     }
   };
 
+  const handleEditRecord = useCallback(
+    (index: number, field: "original" | "translation", value: string) => {
+      setRecords((prev) =>
+        prev.map((r, i) => (i === index ? { ...r, [field]: value } : r))
+      );
+    },
+    []
+  );
+
+  const handleChatSend = useCallback(async (instruction: string) => {
+    if (!records.length) {
+      setChatMessages((prev) => [...prev, { role: "user", content: instruction }, { role: "assistant", content: "⚠️ 수정할 대화 기록이 없습니다." }]);
+      return;
+    }
+    setChatMessages((prev) => [...prev, { role: "user", content: instruction }]);
+    setChatLoading(true);
+    // 첫 수정 전 원본 스냅샷 (원복 버튼으로 되돌릴 수 있게)
+    setOriginalRecords((prev) => (prev === null ? records : prev));
+    try {
+      const res = await fetch("/api/refine-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records, instruction, context: contextRef.current }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        setChatMessages((prev) => [...prev, { role: "assistant", content: `⚠️ 오류 ${res.status}: ${t.slice(0, 150)}` }]);
+        return;
+      }
+      const { records: updated, reply, error } = await res.json();
+      if (error) {
+        setChatMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${error}` }]);
+        return;
+      }
+      if (Array.isArray(updated)) setRecords(updated);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: reply ?? "수정 완료" }]);
+    } catch (err) {
+      setChatMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${String(err)}` }]);
+    } finally {
+      setChatLoading(false);
+    }
+  }, [records, context]);
+
   const handleSaveTxt = () => {
     const lines = records.map((r) => {
       let line = `[${r.timestamp}] [${r.language}] ${r.original}`;
@@ -164,6 +219,20 @@ export default function MeetingPage() {
         />
 
         <div>
+          <label htmlFor="context" className="text-sm font-medium text-gray-600">
+            회의 주제 / 용어 힌트 <span className="text-gray-400 font-normal">(인식·번역 정확도 향상)</span>
+          </label>
+          <textarea
+            id="context"
+            value={context}
+            onChange={(e) => handleContextChange(e.target.value)}
+            rows={2}
+            placeholder="예: 차량용 반도체 SoC 설계 회의. 용어: 테이프아웃, 팹리스, ISO26262, ADAS. 참석자: 김철수, 이영희"
+            className="w-full mt-1 border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-300 placeholder:italic"
+          />
+        </div>
+
+        <div>
           <label className="text-sm font-medium text-gray-600">실시간 자막</label>
           <SubtitleDisplay text={subtitle} />
         </div>
@@ -173,7 +242,14 @@ export default function MeetingPage() {
           onSaveTxt={handleSaveTxt}
           onRefine={handleRefine}
           onSummarize={handleSummarize}
+          onEditRecord={handleEditRecord}
           refineLabel={refineLabel}
+        />
+
+        <RefineChat
+          messages={chatMessages}
+          loading={chatLoading}
+          onSend={handleChatSend}
         />
 
         {/* 디버그 패널 */}

@@ -9,6 +9,8 @@ export async function POST(req: NextRequest) {
     const file = formData.get("audio") as File;
     const engine = (formData.get("engine") as string) ?? "openai";
     const koreanOnly = formData.get("koreanOnly") === "true";
+    // 회의 주제/전문용어 힌트 — Whisper가 도메인 단어를 더 정확히 인식 (최대 ~224토큰)
+    const prompt = ((formData.get("prompt") as string) ?? "").slice(0, 800);
 
     if (!file || file.size === 0) {
       return NextResponse.json({ text: "", language: "" });
@@ -32,6 +34,7 @@ export async function POST(req: NextRequest) {
         response_format: "verbose_json",
       };
       if (koreanOnly) kwargs.language = "ko";
+      if (prompt) kwargs.prompt = prompt;
       const transcript = await groq.audio.transcriptions.create(kwargs);
       return NextResponse.json({
         text: transcript.text.trim(),
@@ -47,6 +50,7 @@ export async function POST(req: NextRequest) {
       response_format: "verbose_json",
     };
     if (koreanOnly) kwargs.language = "ko";
+    if (prompt) kwargs.prompt = prompt;
     const transcript = await openai.audio.transcriptions.create(kwargs);
     return NextResponse.json({
       text: transcript.text.trim(),
