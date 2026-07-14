@@ -26,11 +26,29 @@ const HALLUCINATION_PATTERNS = [
   "チャンネル登録",
 ];
 
+function normalizeText(s: string): string {
+  return s.trim().toLowerCase().replace(/[.,!?。、♥❤️\s]/g, "");
+}
+
 function isHallucination(text: string): boolean {
-  const normalized = text.trim().toLowerCase().replace(/[.,!?。、♥❤️\s]/g, "");
+  const normalized = normalizeText(text);
   if (normalized.length <= 2) return true;
   const lower = text.trim().toLowerCase();
   return HALLUCINATION_PATTERNS.some((p) => lower.includes(p));
+}
+
+// "같은 구절 A A" 형태로 반복되면 하나로 축약 (Whisper 루프 현상)
+function collapseRepeat(text: string): string {
+  const t = text.trim();
+  const words = t.split(/\s+/);
+  const n = words.length;
+  if (n >= 4 && n % 2 === 0) {
+    const half = n / 2;
+    const first = words.slice(0, half).join(" ");
+    const second = words.slice(half).join(" ");
+    if (normalizeText(first) === normalizeText(second)) return first;
+  }
+  return t;
 }
 
 export interface TranscriptResult {
@@ -76,7 +94,8 @@ export default function useAudioRecorder({
       formData.append("audio", blob, "audio.webm");
       formData.append("engine", engine);
       formData.append("koreanOnly", String(koreanOnly));
-      if (context) formData.append("prompt", context);
+      // 힌트(context)는 Whisper에 넣지 않음 — 넣으면 무음 구간에 힌트를 그대로 뱉는 에코 발생.
+      // 힌트는 번역/AI 정제 단계에서만 사용.
 
       const sttRes = await fetch("/api/transcribe", { method: "POST", body: formData });
       if (!sttRes.ok) {
@@ -84,9 +103,11 @@ export default function useAudioRecorder({
         onError(`STT ${sttRes.status}: ${errText.slice(0, 200)}`);
         return;
       }
-      const { text, language, error: sttErr } = await sttRes.json();
+      const { text: rawText, language, error: sttErr } = await sttRes.json();
       if (sttErr) { onError(`STT: ${sttErr}`); return; }
-      if (!text) { onDebug?.("STT 빈 결과"); return; }
+      if (!rawText) { onDebug?.("STT 빈 결과"); return; }
+      // 반복 구절 축약 후 필터링
+      const text = collapseRepeat(rawText);
       if (isHallucination(text)) { onDebug?.(`환각 필터 | "${text}"`); return; }
       // 무음 환각은 직전 결과와 동일하게 반복되는 경향 → 중복 차단
       if (text.trim() === lastTextRef.current) { onDebug?.(`중복 차단 | "${text}"`); return; }

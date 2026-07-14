@@ -233,6 +233,9 @@ export default function MeetingPage() {
             placeholder="예: 차량용 반도체 SoC 설계 회의. 용어: 테이프아웃, 팹리스, ISO26262, ADAS. 참석자: 김철수, 이영희"
             className="w-full mt-1 border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-300 placeholder:italic"
           />
+          <p className="text-xs text-gray-400 mt-1">
+            번역과 AI 정제의 정확도를 높이는 데 사용됩니다. (음성인식 자체에는 영향 없음)
+          </p>
           <div className="flex items-center gap-2 mt-1">
             <button
               onClick={handleApplyContext}
