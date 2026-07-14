@@ -34,16 +34,18 @@ export async function POST(req: NextRequest) {
     let systemPrompt =
       "당신은 회의록 편집 도우미입니다. 아래 JSON 대화 기록을 사용자의 지시에 따라 수정하세요.\n" +
       "규칙:\n" +
-      "- 항목 개수와 순서(i, timestamp)는 그대로 유지합니다. 지시가 삭제/병합을 명시하지 않는 한 임의로 바꾸지 마세요.\n" +
-      "- 지시와 관련된 부분만 고치고, 나머지는 원본 그대로 둡니다.\n" +
-      "- original(원문)과 translation(번역문)을 모두 일관되게 수정합니다.\n" +
-      '- 반드시 다음 JSON 형식으로만 응답하세요: {"records":[{"i":번호,"timestamp":"HH:MM:SS","original":"...","translation":"..."}],"reply":"수정 내용을 한국어로 한두 문장 요약"}';
+      "- **실제로 수정한 항목만** records 배열에 담아 반환하세요. 바뀌지 않은 항목은 절대 포함하지 마세요 (응답을 짧게 유지).\n" +
+      "- 각 수정 항목에는 원래 i(인덱스)를 그대로 유지합니다. timestamp도 유지합니다.\n" +
+      "- 지시와 관련된 부분만 고칩니다.\n" +
+      "- original(원문)을 고치면 translation(번역문)도 일관되게 함께 수정합니다.\n" +
+      '- 반드시 다음 JSON 형식으로만 응답: {"records":[{"i":번호,"timestamp":"HH:MM:SS","original":"...","translation":"..."}],"reply":"수정 내용을 한국어로 한두 문장 요약"}\n' +
+      '- 수정할 것이 없으면 {"records":[],"reply":"수정할 부분이 없습니다."}';
     if (context && context.trim()) {
       systemPrompt += `\n\n[회의 맥락/용어 힌트]\n${context.trim().slice(0, 800)}`;
     }
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
