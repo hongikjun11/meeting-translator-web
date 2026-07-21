@@ -125,19 +125,16 @@ export default function MeetingPage() {
   );
 
   const handleChatSend = useCallback(async (instruction: string) => {
-    if (!records.length) {
-      setChatMessages((prev) => [...prev, { role: "user", content: instruction }, { role: "assistant", content: "⚠️ 수정할 대화 기록이 없습니다." }]);
-      return;
-    }
+    const history = chatMessages; // 브리핑 포함 이전 대화 (배경 참고용)
     setChatMessages((prev) => [...prev, { role: "user", content: instruction }]);
     setChatLoading(true);
-    // 첫 수정 전 원본 스냅샷 (원복 버튼으로 되돌릴 수 있게)
-    setOriginalRecords((prev) => (prev === null ? records : prev));
+    // 기록이 있을 때만 첫 수정 전 원본 스냅샷 (원복용)
+    if (records.length) setOriginalRecords((prev) => (prev === null ? records : prev));
     try {
       const res = await fetch("/api/refine-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records, instruction }),
+        body: JSON.stringify({ records, instruction, history }),
       });
       if (!res.ok) {
         const t = await res.text();
@@ -149,14 +146,15 @@ export default function MeetingPage() {
         setChatMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${error}` }]);
         return;
       }
-      if (Array.isArray(updated)) setRecords(updated);
-      setChatMessages((prev) => [...prev, { role: "assistant", content: reply ?? "수정 완료" }]);
+      // 기록이 있을 때만 반영 (브리핑 응답은 빈 배열이므로 덮어쓰지 않음)
+      if (Array.isArray(updated) && records.length) setRecords(updated);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: reply ?? "완료" }]);
     } catch (err) {
       setChatMessages((prev) => [...prev, { role: "assistant", content: `⚠️ ${String(err)}` }]);
     } finally {
       setChatLoading(false);
     }
-  }, [records]);
+  }, [records, chatMessages]);
 
   const handleSaveTxt = () => {
     const lines = records.map((r) => {

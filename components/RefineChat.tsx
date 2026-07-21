@@ -13,7 +13,11 @@ interface Props {
   onSend: (instruction: string) => void;
 }
 
-const EXAMPLES = ["'의원님'을 '위원님'으로 고쳐줘", "문장 자연스럽게 다듬어줘", "어색한 단어 수정해줘"];
+const EXAMPLES = [
+  "이번 회의는 차량용 반도체 SoC 설계 리뷰야. 참석자는 김철수, 이영희.",
+  "'의원님'을 '위원님'으로 고쳐줘",
+  "문장 자연스럽게 다듬어줘",
+];
 
 // 전체 정제 기본 지시 — 같은 단어의 오인식 편차를 유추해 올바른 형태로 통일
 const AUTO_REFINE =
@@ -42,7 +46,7 @@ export default function RefineChat({ messages, loading, onSend }: Props) {
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-gray-600">
-        AI 대화 기록 정제 <span className="text-gray-400 font-normal">(AI에게 지시하면 대화 기록을 수정·개선)</span>
+        AI 대화 기록 정제 <span className="text-gray-400 font-normal">(회의 시작 전 배경을 알려주면 기억했다가 정제에 활용)</span>
       </label>
 
       <button
@@ -92,7 +96,7 @@ export default function RefineChat({ messages, loading, onSend }: Props) {
           onKeyDown={(e) => {
             if (e.key === "Enter") { e.preventDefault(); send(); }
           }}
-          placeholder="예: 이름 표기 통일해줘, 문장 자연스럽게 다듬어줘"
+          placeholder="회의 배경 설명 또는 수정 지시 (예: 이번 회의는 ~야 / 이름 표기 통일해줘)"
           disabled={loading}
           className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-100"
         />
