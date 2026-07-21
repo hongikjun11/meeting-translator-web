@@ -18,12 +18,8 @@ export default function MeetingPage() {
   const [volume, setVolume] = useState(0);
   const [threshold, setThreshold] = useState(0.03);
   const thresholdRef = useRef(0.03);
-  const [context, setContext] = useState("");
-  const [appliedContext, setAppliedContext] = useState("");
-  const contextRef = useRef("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
-  const [showContext, setShowContext] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [summary, setSummary] = useState("");
   const [showSummary, setShowSummary] = useState(false);
@@ -58,16 +54,10 @@ export default function MeetingPage() {
     setThreshold(v);
   }, []);
 
-  const handleApplyContext = useCallback(() => {
-    contextRef.current = context;
-    setAppliedContext(context);
-  }, [context]);
-
   const { start, stop } = useAudioRecorder({
     engine,
     koreanOnly,
     thresholdRef,
-    contextRef,
     onResult,
     onVolume: setVolume,
     onError,
@@ -147,7 +137,7 @@ export default function MeetingPage() {
       const res = await fetch("/api/refine-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records, instruction, context: contextRef.current }),
+        body: JSON.stringify({ records, instruction }),
       });
       if (!res.ok) {
         const t = await res.text();
@@ -166,7 +156,7 @@ export default function MeetingPage() {
     } finally {
       setChatLoading(false);
     }
-  }, [records, context]);
+  }, [records]);
 
   const handleSaveTxt = () => {
     const lines = records.map((r) => {
@@ -201,57 +191,6 @@ export default function MeetingPage() {
           onEngineChange={setEngine}
           onKoreanOnlyChange={setKoreanOnly}
         />
-
-        <div>
-          <button
-            onClick={() => setShowContext((v) => !v)}
-            className="flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-gray-800"
-          >
-            <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-gray-200 text-gray-600 text-xs leading-none">
-              {showContext ? "−" : "+"}
-            </span>
-            회의 주제 / 용어 힌트
-            {!showContext && appliedContext.trim() && (
-              <span className="text-xs text-green-600 font-normal">✓ 적용됨</span>
-            )}
-          </button>
-          {!showContext && (
-            <span className="text-gray-400 font-normal text-xs ml-6 block">인식·번역 정확도 향상</span>
-          )}
-        </div>
-
-        {showContext && (
-        <div>
-          <label htmlFor="context" className="sr-only">
-            회의 주제 / 용어 힌트
-          </label>
-          <textarea
-            id="context"
-            value={context}
-            onChange={(e) => setContext(e.target.value)}
-            rows={2}
-            placeholder="예: 차량용 반도체 SoC 설계 회의. 용어: 테이프아웃, 팹리스, ISO26262, ADAS. 참석자: 김철수, 이영희"
-            className="w-full mt-1 border rounded-lg px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder:text-gray-300 placeholder:italic"
-          />
-          <p className="text-xs text-gray-400 mt-1">
-            번역과 AI 정제의 정확도를 높이는 데 사용됩니다. (음성인식 자체에는 영향 없음)
-          </p>
-          <div className="flex items-center gap-2 mt-1">
-            <button
-              onClick={handleApplyContext}
-              disabled={context === appliedContext}
-              className="px-3 py-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white rounded-lg text-xs font-semibold"
-            >
-              적용
-            </button>
-            {context === appliedContext && appliedContext.trim() ? (
-              <span className="text-xs text-green-600">✓ 적용됨</span>
-            ) : context !== appliedContext ? (
-              <span className="text-xs text-amber-600">● 변경됨 — 적용을 눌러주세요</span>
-            ) : null}
-          </div>
-        </div>
-        )}
 
         <div>
           <label className="text-sm font-medium text-gray-600">실시간 자막</label>

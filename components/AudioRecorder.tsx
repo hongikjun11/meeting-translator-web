@@ -61,7 +61,6 @@ interface Props {
   engine: "openai" | "groq";
   koreanOnly: boolean;
   thresholdRef: MutableRefObject<number>;
-  contextRef: MutableRefObject<string>;
   onResult: (result: TranscriptResult) => void;
   onVolume: (level: number) => void;
   onError: (msg: string) => void;
@@ -72,7 +71,6 @@ export default function useAudioRecorder({
   engine,
   koreanOnly,
   thresholdRef,
-  contextRef,
   onResult,
   onVolume,
   onError,
@@ -89,13 +87,10 @@ export default function useAudioRecorder({
     processingRef.current = true;
     try {
       onDebug?.(`전송 | size=${blob.size}`);
-      const context = contextRef.current.trim();
       const formData = new FormData();
       formData.append("audio", blob, "audio.webm");
       formData.append("engine", engine);
       formData.append("koreanOnly", String(koreanOnly));
-      // 힌트(context)는 Whisper에 넣지 않음 — 넣으면 무음 구간에 힌트를 그대로 뱉는 에코 발생.
-      // 힌트는 번역/AI 정제 단계에서만 사용.
 
       const sttRes = await fetch("/api/transcribe", { method: "POST", body: formData });
       if (!sttRes.ok) {
@@ -118,7 +113,7 @@ export default function useAudioRecorder({
       const transRes = await fetch("/api/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, language, context }),
+        body: JSON.stringify({ text, language }),
       });
       if (!transRes.ok) {
         const errText = await transRes.text();
