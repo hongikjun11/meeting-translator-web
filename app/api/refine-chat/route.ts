@@ -41,8 +41,13 @@ export async function POST(req: NextRequest) {
       "2) 사용자가 질문하거나 대화를 거는 경우(예: '지금 무슨 내용이야?', '참석자 누구였지?'): " +
       "지금까지의 회의 배경과 대화 기록을 바탕으로 reply에 간단하고 친절하게 답하고, records는 빈 배열([])로 반환하세요.\n" +
       "3) 사용자가 기록 수정을 지시하는 경우: 지시와 지금까지 파악한 회의 배경을 함께 참고해 기록을 수정하세요.\n" +
-      "수정 규칙:\n" +
-      "- **실제로 수정한 항목만** records 배열에 담아 반환하세요. 바뀌지 않은 항목은 절대 포함하지 마세요 (응답을 짧게 유지).\n" +
+      "매우 중요한 원칙:\n" +
+      "- 답변·요약·설명은 반드시 reply 필드에만 쓰세요. records에는 절대 답변이나 요약을 넣지 마세요.\n" +
+      "- 상황 1, 2(배경 설명/질문)에서는 records를 반드시 빈 배열([])로 두세요.\n" +
+      "- 여러 항목을 하나로 합치거나, 한 항목에 다른 항목 내용을 몰아넣지 마세요. 항목은 1:1로 유지합니다.\n" +
+      "- 각 항목의 분량을 원문보다 크게 늘리지 마세요. 요약하거나 새로 쓰지 말고, 오인식된 단어만 고칩니다.\n" +
+      "수정 규칙(상황 3):\n" +
+      "- **실제로 수정한 항목만** records 배열에 담아 반환하세요. 바뀌지 않은 항목은 절대 포함하지 마세요.\n" +
       "- 각 수정 항목에는 원래 i(인덱스)와 timestamp를 그대로 유지합니다.\n" +
       "- original(원문)을 고치면 translation(번역문)도 일관되게 함께 수정합니다.\n" +
       "- 같은 단어가 다르게 오인식된 경우, 회의 배경과 문맥을 근거로 올바른 하나의 표기로 통일합니다.\n" +
@@ -84,10 +89,14 @@ export async function POST(req: NextRequest) {
     const updated: Record[] = records.map((r, i) => {
       const found = parsed.records?.find((x) => x.i === i);
       if (!found) return r;
+      // 안전장치: 수정 원문이 비정상적으로 부풀려졌으면(요약/답변 누출) 무시
+      const newOriginal = found.original ?? r.original;
+      const ballooned = newOriginal.length > r.original.length * 3 + 50;
+      if (ballooned) return r;
       return {
         timestamp: found.timestamp ?? r.timestamp,
         language: r.language,
-        original: found.original ?? r.original,
+        original: newOriginal,
         translation: found.translation ?? r.translation,
       };
     });
