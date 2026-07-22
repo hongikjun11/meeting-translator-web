@@ -98,20 +98,26 @@ export default function MeetingPage() {
   };
 
   const handleSummarize = async () => {
-    if (!records.length) { setSubtitle("⚠️ 요약할 내용이 없습니다"); return; }
-    setSubtitle("요약 생성 중...");
+    if (!records.length) { setSubtitle("⚠️ 회의록으로 만들 내용이 없습니다"); return; }
+    setSubtitle("회의록 생성 중...");
     try {
       const res = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ records }),
+        body: JSON.stringify({ records, history: chatMessages }),
       });
-      const { summary: s } = await res.json();
+      if (!res.ok) {
+        const t = await res.text();
+        setSubtitle(`⚠️ 회의록 오류 ${res.status}: ${t.slice(0, 120)}`);
+        return;
+      }
+      const { summary: s, error } = await res.json();
+      if (error) { setSubtitle(`⚠️ 회의록 오류: ${error}`); return; }
       setSummary(s);
       setShowSummary(true);
-      setSubtitle("요약 완료");
+      setSubtitle("회의록 완성");
     } catch (err) {
-      setSubtitle(`⚠️ 요약 오류: ${err}`);
+      setSubtitle(`⚠️ 회의록 오류: ${err}`);
     }
   };
 
@@ -249,15 +255,31 @@ export default function MeetingPage() {
 
       {showSummary && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 flex flex-col gap-4">
-            <h2 className="text-lg font-bold">📋 회의 요약</h2>
-            <p className="whitespace-pre-wrap text-sm text-gray-800 max-h-96 overflow-y-auto">{summary}</p>
-            <button
-              onClick={() => setShowSummary(false)}
-              className="self-end px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold"
-            >
-              닫기
-            </button>
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 flex flex-col gap-4">
+            <h2 className="text-lg font-bold">📋 회의록</h2>
+            <p className="whitespace-pre-wrap text-sm text-gray-800 max-h-[70vh] overflow-y-auto">{summary}</p>
+            <div className="flex gap-2 self-end">
+              <button
+                onClick={() => {
+                  const blob = new Blob([summary], { type: "text/plain;charset=utf-8" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `회의록-${new Date().toISOString().slice(0, 10)}.txt`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg font-semibold"
+              >
+                📥 회의록 저장
+              </button>
+              <button
+                onClick={() => setShowSummary(false)}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}

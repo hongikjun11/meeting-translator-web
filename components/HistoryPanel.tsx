@@ -112,7 +112,7 @@ export default function HistoryPanel({
           </button>
         )}
         <button onClick={onSummarize} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium">
-          📋 회의 요약
+          📋 회의록
         </button>
       </div>
     </div>
