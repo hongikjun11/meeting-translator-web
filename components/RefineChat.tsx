@@ -62,14 +62,12 @@ export default function RefineChat({ messages, loading, onSend }: Props) {
           <div className="text-gray-400 text-xs flex flex-wrap gap-1 items-center">
             예시:
             {EXAMPLES.map((ex) => (
-              <button
+              <span
                 key={ex}
-                onClick={() => onSend(ex)}
-                disabled={loading}
-                className="px-2 py-0.5 bg-gray-100 hover:bg-gray-200 rounded-full disabled:opacity-40"
+                className="px-2 py-0.5 bg-gray-100 rounded-full text-gray-500 select-none"
               >
                 {ex}
-              </button>
+              </span>
             ))}
           </div>
         )}
