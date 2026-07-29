@@ -2,7 +2,11 @@
 
 import { useRef, useCallback, type MutableRefObject } from "react";
 
-const CHUNK_MS = 4000;
+// VAD(무음 감지) 기반 분할 파라미터
+const TICK_MS = 100; // RMS 측정 주기
+const SILENCE_HANG_MS = 800; // 말이 멈춘 뒤 이만큼 무음이면 문장 끝으로 보고 자름
+const MIN_CHUNK_MS = 1200; // 너무 짧게 자르지 않도록 최소 길이
+const MAX_CHUNK_MS = 15000; // 계속 말해도 이 길이에서 강제 분할
 
 // Whisper 무음 환각 필터 — 구두점 제거 후 포함 여부 체크
 const HALLUCINATION_PATTERNS = [
@@ -140,19 +144,39 @@ export default function useAudioRecorder({
     const recorder = new MediaRecorder(stream, { mimeType });
     const chunks: Blob[] = [];
     const timeDomain = new Uint8Array(analyser ? analyser.fftSize : 256);
-    // 데스크탑처럼 4초 전체 버퍼의 평균 RMS를 계산 (제곱합 누적)
-    let sumSquares = 0;
-    let sampleCount = 0;
+
+    // VAD 상태: 말이 감지됐는지, 말 이후 무음이 얼마나 지속됐는지, 총 경과 시간
+    let speechDetected = false;
+    let silenceMs = 0;
+    let elapsedMs = 0;
 
     const rmsInterval = setInterval(() => {
       if (!analyser) return;
       analyser.getByteTimeDomainData(timeDomain);
+      let sum = 0;
       for (let i = 0; i < timeDomain.length; i++) {
         const n = (timeDomain[i] - 128) / 128;
-        sumSquares += n * n;
-        sampleCount++;
+        sum += n * n;
       }
-    }, 100);
+      const tickRms = Math.sqrt(sum / timeDomain.length);
+      elapsedMs += TICK_MS;
+
+      const threshold = thresholdRef.current;
+      if (tickRms >= threshold) {
+        speechDetected = true;
+        silenceMs = 0;
+      } else if (speechDetected) {
+        silenceMs += TICK_MS;
+      }
+
+      // 문장 끝(말 후 충분한 무음) 또는 최대 길이 도달 시 자름
+      const utteranceEnd =
+        speechDetected && silenceMs >= SILENCE_HANG_MS && elapsedMs >= MIN_CHUNK_MS;
+      const forceCut = elapsedMs >= MAX_CHUNK_MS;
+      if ((utteranceEnd || forceCut) && recorder.state === "recording") {
+        recorder.stop();
+      }
+    }, TICK_MS);
 
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
@@ -162,21 +186,16 @@ export default function useAudioRecorder({
       clearInterval(rmsInterval);
       // 먼저 녹음을 즉시 재개해 조각 사이 공백을 최소화
       if (runningRef.current) startChunk(stream, mimeType);
-      const rms = sampleCount > 0 ? Math.sqrt(sumSquares / sampleCount) : 0;
-      const threshold = thresholdRef.current;
-      onDebug?.(`청크 완료 | RMS=${rms.toFixed(4)} (기준 ${threshold.toFixed(3)})`);
-      if (rms >= threshold && chunks.length > 0) {
+      onDebug?.(`청크 완료 | ${(elapsedMs / 1000).toFixed(1)}초 | 말감지=${speechDetected}`);
+      if (speechDetected && chunks.length > 0) {
         const blob = new Blob(chunks, { type: mimeType });
         enqueueChunk(blob); // 큐에 등록 — 버리지 않고 순서대로 처리
       } else {
-        onDebug?.(`무음 스킵 | RMS=${rms.toFixed(4)}`);
+        onDebug?.("무음 스킵");
       }
     };
 
     recorder.start();
-    setTimeout(() => {
-      if (recorder.state === "recording") recorder.stop();
-    }, CHUNK_MS);
   }, [enqueueChunk, onDebug]);
 
   const start = useCallback(async () => {
