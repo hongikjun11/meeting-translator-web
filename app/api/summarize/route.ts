@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import type { Record } from "@/app/api/refine/route";
 
 export const maxDuration = 60;
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -62,20 +62,17 @@ export async function POST(req: NextRequest) {
       (briefing ? `[회의 배경/참고 메모]\n${briefing}\n\n` : "") +
       `[회의 대화 기록]\n${transcript}`;
 
-    const message = await anthropic.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 8000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
+      ],
     });
 
-    const summary = message.content
-      .filter((b): b is Anthropic.TextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("")
-      .trim();
-
-    return NextResponse.json({ summary });
+    return NextResponse.json({
+      summary: response.choices[0].message.content?.trim() ?? "",
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("Minutes error:", msg);
