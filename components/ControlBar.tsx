@@ -49,7 +49,7 @@ export default function ControlBar({
           onChange={(e) => onEngineChange(e.target.value as "openai" | "groq")}
           className="border rounded-lg px-3 py-2 text-sm"
         >
-          <option value="openai">OpenAI Whisper-1</option>
+          <option value="openai">OpenAI gpt-4o-transcribe</option>
           <option value="groq">Groq Whisper large-v3 (무료)</option>
         </select>
         <label className="flex items-center gap-2 text-sm cursor-pointer">

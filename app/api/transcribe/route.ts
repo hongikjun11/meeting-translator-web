@@ -3,6 +3,13 @@ import OpenAI from "openai";
 
 export const maxDuration = 60;
 
+// 한글이 전체 글자의 절반 이상이면 한국어로 간주 (gpt-4o-transcribe는 언어를 반환하지 않음)
+function detectKorean(text: string): boolean {
+  const hangul = (text.match(/[가-힣]/g) || []).length;
+  const letters = (text.match(/[\p{L}]/gu) || []).length;
+  return letters > 0 && hangul / letters >= 0.5;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -43,18 +50,21 @@ export async function POST(req: NextRequest) {
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    // gpt-4o-transcribe: whisper-1보다 정확 (특히 웅얼거림·전문용어).
+    // 단 verbose_json(언어 감지) 미지원 → response_format은 json, 언어는 아래 휴리스틱으로 판별.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const kwargs: any = {
-      model: "whisper-1",
+      model: "gpt-4o-transcribe",
       file: audioFile,
-      response_format: "verbose_json",
+      response_format: "json",
     };
     if (koreanOnly) kwargs.language = "ko";
     if (prompt) kwargs.prompt = prompt;
     const transcript = await openai.audio.transcriptions.create(kwargs);
+    const text = transcript.text.trim();
     return NextResponse.json({
-      text: transcript.text.trim(),
-      language: (transcript as { language?: string }).language ?? "",
+      text,
+      language: koreanOnly || detectKorean(text) ? "korean" : "",
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);

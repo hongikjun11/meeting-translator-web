@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import type { Record } from "@/app/api/refine/route";
 
 export const maxDuration = 60;
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 interface ChatTurn {
   role: "user" | "assistant";
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       .filter((h) => h.role === "user")
       .map((h) => h.content)
       .join("\n")
-      .slice(0, 1500);
+      .slice(0, 2000);
 
     const systemPrompt =
       "당신은 전문 회의록 작성자입니다. 음성인식으로 기록된 회의 대화와 (있다면) 회의 배경 메모를 바탕으로 정식 회의록을 한국어 마크다운으로 작성하세요.\n\n" +
@@ -53,25 +53,29 @@ export async function POST(req: NextRequest) {
       "작성 규칙:\n" +
       "- 대화는 구어체이고 음성인식 오류가 섞여 있습니다. 문맥으로 의미를 추론해 정리하되, 없는 사실을 지어내지 마세요.\n" +
       "- 참석자·담당자·안건 삭제/보류 결정 등 대화만으로 불분명한 정보는 반드시 [회의 배경/참고 메모]를 우선 근거로 삼으세요.\n" +
+      "- 회의가 한국어·중국어 등 여러 언어로 진행될 수 있습니다. 회의록은 한국어로 통일해 작성하세요.\n" +
       "- '구독', '좋아요', '시청해 주셔서 감사합니다', '자막은 설정에서', 광고성 문구 등 회의와 무관한 음성인식 환각은 완전히 무시하세요.\n" +
-      "- 전문용어(Wafer, Lot, Good die, Map, WIP, FCST, MES 등)는 원문 표기를 살리세요.\n" +
+      "- 전문용어(Wafer, Lot, Good die, WIP, FCST, MES 등)는 원문 표기를 살리세요.\n" +
       "- 업무 문서답게 간결하고 정확하게 작성하세요.";
 
     const userContent =
       (briefing ? `[회의 배경/참고 메모]\n${briefing}\n\n` : "") +
       `[회의 대화 기록]\n${transcript}`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ],
+    const message = await anthropic.messages.create({
+      model: "claude-opus-4-8",
+      max_tokens: 8000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
     });
 
-    return NextResponse.json({
-      summary: response.choices[0].message.content?.trim() ?? "",
-    });
+    const summary = message.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
+
+    return NextResponse.json({ summary });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("Minutes error:", msg);
