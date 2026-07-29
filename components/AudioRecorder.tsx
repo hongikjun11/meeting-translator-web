@@ -78,13 +78,12 @@ export default function useAudioRecorder({
 }: Props) {
   const streamRef = useRef<MediaStream | null>(null);
   const runningRef = useRef(false);
-  const processingRef = useRef(false);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const lastTextRef = useRef("");
+  // 처리 대기열 — 조각을 버리지 않고 순서대로 STT·번역 (처리가 4초보다 느려도 손실 없음)
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
 
   const processChunk = useCallback(async (blob: Blob) => {
-    if (processingRef.current) { onDebug?.("이전 청크 처리 중 — 스킵"); return; }
-    processingRef.current = true;
     try {
       onDebug?.(`전송 | size=${blob.size}`);
       const formData = new FormData();
@@ -126,10 +125,13 @@ export default function useAudioRecorder({
       onResult({ text, language, translation });
     } catch (err) {
       onError(String(err));
-    } finally {
-      processingRef.current = false;
     }
   }, [engine, koreanOnly, onResult, onError, onDebug]);
+
+  // 큐에 순차 등록 (앞 조각 처리가 끝난 뒤 다음 조각 처리)
+  const enqueueChunk = useCallback((blob: Blob) => {
+    queueRef.current = queueRef.current.then(() => processChunk(blob));
+  }, [processChunk]);
 
   const startChunk = useCallback((stream: MediaStream, mimeType: string) => {
     if (!runningRef.current) return;
@@ -158,23 +160,24 @@ export default function useAudioRecorder({
 
     recorder.onstop = () => {
       clearInterval(rmsInterval);
+      // 먼저 녹음을 즉시 재개해 조각 사이 공백을 최소화
+      if (runningRef.current) startChunk(stream, mimeType);
       const rms = sampleCount > 0 ? Math.sqrt(sumSquares / sampleCount) : 0;
       const threshold = thresholdRef.current;
       onDebug?.(`청크 완료 | RMS=${rms.toFixed(4)} (기준 ${threshold.toFixed(3)})`);
       if (rms >= threshold && chunks.length > 0) {
         const blob = new Blob(chunks, { type: mimeType });
-        processChunk(blob);
+        enqueueChunk(blob); // 큐에 등록 — 버리지 않고 순서대로 처리
       } else {
         onDebug?.(`무음 스킵 | RMS=${rms.toFixed(4)}`);
       }
-      if (runningRef.current) startChunk(stream, mimeType);
     };
 
     recorder.start();
     setTimeout(() => {
       if (recorder.state === "recording") recorder.stop();
     }, CHUNK_MS);
-  }, [processChunk, onDebug]);
+  }, [enqueueChunk, onDebug]);
 
   const start = useCallback(async () => {
     try {
