@@ -81,7 +81,8 @@ export async function POST(req: NextRequest) {
       : `[회의 배경 설명]\n${instruction.trim()}\n\n(아직 회의 기록이 없습니다. 배경을 기억하고 짧게 답하세요.)`;
 
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-8",
+      // 전체 정제는 대화 전체를 처리해 느림 → 빠른 Haiku로 60초 타임아웃 방지
+      model: "claude-haiku-4-5",
       max_tokens: 8000,
       system: systemPrompt,
       messages: [...priorTurns, { role: "user", content: userContent }],
