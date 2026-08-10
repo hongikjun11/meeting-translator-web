@@ -63,7 +63,8 @@ export async function POST(req: NextRequest) {
       `[회의 대화 기록]\n${transcript}`;
 
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-8",
+      // 긴 회의도 60초(Vercel 한도) 안에 처리되도록 Opus 대신 빠른 Sonnet 5 사용
+      model: "claude-sonnet-5",
       max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
